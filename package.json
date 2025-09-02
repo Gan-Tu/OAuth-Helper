@@ -1,0 +1,21 @@
+{
+  "name": "oauth-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple Express app to obtain OAuth access and refresh tokens for Google and Dropbox using user-provided client credentials.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0",
+    "nanoid": "^5.0.7"
+  }
+}
+

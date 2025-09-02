@@ -1,0 +1,20 @@
+steps:
+# Build the image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'us-central1-docker.pkg.dev/tugan-api-392915/cloudrun/oauth-helper/oauth-helper:$COMMIT_SHA', '.']
+# Push the image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'us-central1-docker.pkg.dev/tugan-api-392915/cloudrun/oauth-helper/oauth-helper:$COMMIT_SHA']
+# Deploy image to Cloud Run
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: 
+    - 'run'
+    - 'deploy'
+    - 'oauth-helper'
+    - '--image'
+    - 'us-central1-docker.pkg.dev/tugan-api-392915/cloudrun/oauth-helper/oauth-helper:$COMMIT_SHA'
+    - '--region'
+    - 'us-central1'
+images:
+- 'us-central1-docker.pkg.dev/tugan-api-392915/cloudrun/oauth-helper/oauth-helper:$COMMIT_SHA'
