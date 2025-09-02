@@ -4,7 +4,18 @@ const morgan = require('morgan');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL;
+
+// Respect reverse proxies (X-Forwarded-Proto/Host) so req.protocol/host are accurate
+app.set('trust proxy', true);
+
+function getBaseUrl(req) {
+  // If BASE_URL is explicitly provided, prefer it
+  if (BASE_URL && BASE_URL.trim().length > 0) return BASE_URL;
+  const host = req.get('host');
+  const protocol = req.protocol;
+  return `${protocol}://${host}`;
+}
 
 app.use(morgan('dev'));
 app.use(express.json());
@@ -31,12 +42,13 @@ app.post('/api/authorize', async (req, res) => {
     pending.set(state, { provider, client_id, client_secret, createdAt: Date.now() });
 
     if (provider === 'google') {
+      const baseUrl = getBaseUrl(req);
       const scopes = (scope && String(scope).trim().length > 0) ? scope : undefined;
 
       const params = new URLSearchParams({
         client_id,
         response_type: 'code',
-        redirect_uri: `${BASE_URL}/auth/google/callback`,
+        redirect_uri: `${baseUrl}/auth/google/callback`,
         include_granted_scopes: 'true',
         state,
         access_type: 'offline',
@@ -45,19 +57,20 @@ app.post('/api/authorize', async (req, res) => {
       if (scopes) params.set('scope', scopes);
 
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-      return res.json({ authUrl, state, redirect_uri: `${BASE_URL}/auth/google/callback` });
+      return res.json({ authUrl, state, redirect_uri: `${baseUrl}/auth/google/callback` });
     }
 
     if (provider === 'dropbox') {
+      const baseUrl = getBaseUrl(req);
       const params = new URLSearchParams({
         response_type: 'code',
         client_id,
-        redirect_uri: `${BASE_URL}/auth/dropbox/callback`,
+        redirect_uri: `${baseUrl}/auth/dropbox/callback`,
         state,
         token_access_type: 'offline'
       });
       const authUrl = `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
-      return res.json({ authUrl, state, redirect_uri: `${BASE_URL}/auth/dropbox/callback` });
+      return res.json({ authUrl, state, redirect_uri: `${baseUrl}/auth/dropbox/callback` });
     }
 
     return res.status(400).json({ error: 'Unsupported provider' });
@@ -83,7 +96,7 @@ app.get('/auth/google/callback', async (req, res) => {
       client_secret: record.client_secret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: `${BASE_URL}/auth/google/callback`
+      redirect_uri: `${getBaseUrl(req)}/auth/google/callback`
     });
     const response = await axios.post('https://oauth2.googleapis.com/token', body.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -111,7 +124,7 @@ app.get('/auth/dropbox/callback', async (req, res) => {
       grant_type: 'authorization_code',
       client_id: record.client_id,
       client_secret: record.client_secret,
-      redirect_uri: `${BASE_URL}/auth/dropbox/callback`
+      redirect_uri: `${getBaseUrl(req)}/auth/dropbox/callback`
     });
     const tokenResp = await axios.post('https://api.dropboxapi.com/oauth2/token', body.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -164,33 +177,6 @@ app.post('/api/refresh', async (req, res) => {
   }
 });
 
-// Simple token result renderer
-function renderTokenResult(provider, data) {
-  const pretty = escapeHtml(JSON.stringify(data, null, 2));
-  return `<!doctype html>
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>${provider} OAuth Result</title>
-      <style>
-        body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 2rem; }
-        pre { background: #111; color: #eaeaea; padding: 1rem; border-radius: 8px; overflow: auto; }
-        a { color: #0366d6; text-decoration: none; }
-        .box { margin: 1rem 0; }
-      </style>
-    </head>
-    <body>
-      <h1>${provider} OAuth tokens</h1>
-      <div class="box">
-        <p>Copy the tokens below. This page is served from your local dev app.</p>
-      </div>
-      <pre>${pretty}</pre>
-      <div class="box"><a href="/">Back to start</a></div>
-    </body>
-  </html>`;
-}
-
 function renderStoreAndRedirect(provider, data) {
   const payload = { provider, data };
   const b64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
@@ -229,7 +215,5 @@ function escapeHtml(str) {
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`OAuth Helper running on ${BASE_URL}`);
-  console.log(`Google redirect URI: ${BASE_URL}/auth/google/callback`);
-  console.log(`Dropbox redirect URI: ${BASE_URL}/auth/dropbox/callback`);
+  console.log(`OAuth Helper running on http://localhost:${PORT}`);
 });
